@@ -6,7 +6,20 @@ require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server, path: "/ws" });
+const wss = new WebSocket.Server({ noServer: true });
+
+server.on("upgrade", (request, socket, head) => {
+  const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+
+  if (pathname === "/ws") {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit("connection", ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
 
 
 const AGENT_ID = process.env.AGENT_ID || "aiBrad";
