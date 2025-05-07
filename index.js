@@ -6,7 +6,8 @@ require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ server, path: "/ws" });
+
 
 const AGENT_ID = process.env.AGENT_ID || "aiBrad";
 const ENABLE_TRANSCRIPTION = process.env.TRANSCRIPT_LOGGING === "true";
