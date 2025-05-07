@@ -11,11 +11,11 @@ const wss = new WebSocket.Server({ server });
 const AGENT_ID = process.env.AGENT_ID || "aiBrad";
 const ENABLE_TRANSCRIPTION = process.env.TRANSCRIPT_LOGGING === "true";
 
+// ✅ WebSocket relay: Twilio → ElevenLabs
 wss.on("connection", async (twilioSocket) => {
   console.log("📞 Twilio WebSocket connected");
 
   try {
-    // Step 1: Get a signed URL from ElevenLabs
     const res = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
       {
@@ -32,7 +32,6 @@ wss.on("connection", async (twilioSocket) => {
       return;
     }
 
-    // Step 2: Connect to ElevenLabs
     const elevenSocket = new WebSocket(signed_url);
 
     elevenSocket.on("open", () => {
@@ -46,7 +45,6 @@ wss.on("connection", async (twilioSocket) => {
       );
     });
 
-    // Step 3: Forward Twilio audio → ElevenLabs
     twilioSocket.on("message", (data) => {
       try {
         const msg = JSON.parse(data);
@@ -61,7 +59,6 @@ wss.on("connection", async (twilioSocket) => {
       }
     });
 
-    // Step 4: Log ElevenLabs messages
     elevenSocket.on("message", (data) => {
       try {
         const parsed = JSON.parse(data);
@@ -71,7 +68,6 @@ wss.on("connection", async (twilioSocket) => {
       }
     });
 
-    // Step 5: Clean up on disconnect or error
     const cleanup = () => {
       if (elevenSocket.readyState === WebSocket.OPEN) elevenSocket.close();
       if (twilioSocket.readyState === WebSocket.OPEN) twilioSocket.close();
@@ -103,8 +99,23 @@ wss.on("connection", async (twilioSocket) => {
   }
 });
 
+// ✅ Root test route
 app.get("/", (req, res) => {
   res.send("🧠 Twilio → ElevenLabs WebSocket relay is running.");
+});
+
+// ✅ Twilio HTTP webhook: returns valid TwiML
+app.post("/twilio", express.text({ type: "*/*" }), (req, res) => {
+  const response = `
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+      <Start>
+        <Stream url="wss://${req.headers.host}" />
+      </Start>
+    </Response>
+  `;
+  res.set("Content-Type", "text/xml");
+  res.status(200).send(response);
 });
 
 const PORT = process.env.PORT || 8080;
