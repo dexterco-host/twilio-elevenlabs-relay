@@ -11,6 +11,51 @@ const wss = new WebSocket.Server({ server });
 const AGENT_ID = process.env.AGENT_ID || "aiBrad";
 const ENABLE_TRANSCRIPTION = process.env.TRANSCRIPT_LOGGING === "true";
 
+app.use(express.json());
+
+// ✅ POST /init — ElevenLabs personalization webhook
+app.post("/init", (req, res) => {
+  const { caller_id, agent_id, called_number, call_sid } = req.body;
+
+  console.log("📡 ElevenLabs requested call init for:", caller_id);
+
+  const responseData = {
+    type: "conversation_initiation_client_data",
+    dynamic_variables: {
+      caller_name: "Brad",
+      last_interaction: "friendly and recent",
+    },
+    conversation_config_override: {
+      agent: {
+        prompt: {
+          prompt: "You are aiBrad, the digital twin of Brad Harvey, founder of Dexter Co. You are warm, witty, and insightful."
+        },
+        first_message: "Hey there — this is aiBrad. What’s on your mind today?",
+        language: "en"
+      },
+      tts: {
+        voice_id: "YOUR_ELEVENLABS_VOICE_ID" // Replace with your actual voice_id
+      }
+    }
+  };
+
+  res.json(responseData);
+});
+
+// ✅ Twilio webhook returns TwiML to start the stream
+app.post("/twilio", express.text({ type: "*/*" }), (req, res) => {
+  const response = `
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+      <Start>
+        <Stream url="wss://${req.headers.host}/" />
+      </Start>
+    </Response>
+  `;
+  res.set("Content-Type", "text/xml");
+  res.status(200).send(response);
+});
+
 // ✅ WebSocket relay: Twilio → ElevenLabs
 wss.on("connection", async (twilioSocket) => {
   console.log("📞 Twilio WebSocket connected");
@@ -99,26 +144,13 @@ wss.on("connection", async (twilioSocket) => {
   }
 });
 
-// ✅ Root test route
+// ✅ Health check
 app.get("/", (req, res) => {
-  res.send("🧠 Twilio → ElevenLabs WebSocket relay is running.");
-});
-
-// ✅ Twilio HTTP webhook: returns valid TwiML
-app.post("/twilio", express.text({ type: "*/*" }), (req, res) => {
-  const response = `
-    <?xml version="1.0" encoding="UTF-8"?>
-    <Response>
-      <Start>
-        <Stream url="wss://${req.headers.host}" />
-      </Start>
-    </Response>
-  `;
-  res.set("Content-Type", "text/xml");
-  res.status(200).send(response);
+  res.send("🧠 Twilio → ElevenLabs relay server is live.");
 });
 
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`✅ Listening on port ${PORT}`);
 });
+`
