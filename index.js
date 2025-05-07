@@ -61,7 +61,7 @@ app.post("/twilio", express.text({ type: "*/*" }), (req, res) => {
   const response = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
-    <Stream url="wss://${req.headers.host}/ws" />
+    <Stream url="wss://twilio-elevenlabs-relay.onrender.com/ws" />
   </Start>
 </Response>`.trim();
 
