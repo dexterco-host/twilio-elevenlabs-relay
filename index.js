@@ -42,7 +42,7 @@ app.post("/init", (req, res) => {
   res.json(responseData);
 });
 
-// ✅ Twilio webhook returns TwiML to start the stream
+// ✅ POST /twilio — Twilio webhook returns TwiML
 app.post("/twilio", express.text({ type: "*/*" }), (req, res) => {
   const response = `
     <?xml version="1.0" encoding="UTF-8"?>
@@ -144,7 +144,7 @@ wss.on("connection", async (twilioSocket) => {
   }
 });
 
-// ✅ Health check
+// ✅ GET / — Health check
 app.get("/", (req, res) => {
   res.send("🧠 Twilio → ElevenLabs relay server is live.");
 });
@@ -153,4 +153,3 @@ const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`✅ Listening on port ${PORT}`);
 });
-`
