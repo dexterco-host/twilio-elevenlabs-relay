@@ -8,55 +8,106 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const agentId = "aiBrad";
+const AGENT_ID = process.env.AGENT_ID || "aiBrad";
+const ENABLE_TRANSCRIPTION = process.env.TRANSCRIPT_LOGGING === "true";
 
 wss.on("connection", async (twilioSocket) => {
   console.log("📞 Twilio WebSocket connected");
 
-  const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
-  const signedRes = await fetch(`https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`, {
-    headers: { "xi-api-key": elevenLabsKey }
-  });
-
-  const { signed_url } = await signedRes.json();
-  if (!signed_url) {
-    console.error("❌ Could not get signed ElevenLabs URL");
-    twilioSocket.close();
-    return;
-  }
-
-  const elevenLabsSocket = new WebSocket(signed_url);
-
-  twilioSocket.on("message", (data) => {
-    const message = JSON.parse(data);
-    if (message.event === "media") {
-      const audioData = message.media.payload;
-      if (elevenLabsSocket.readyState === WebSocket.OPEN) {
-        elevenLabsSocket.send(JSON.stringify({ audio: audioData }));
+  try {
+    // Step 1: Get a signed URL from ElevenLabs
+    const res = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
+      {
+        headers: {
+          "xi-api-key": process.env.ELEVENLABS_API_KEY,
+        },
       }
+    );
+
+    const { signed_url } = await res.json();
+    if (!signed_url) {
+      console.error("❌ Failed to get signed ElevenLabs URL");
+      twilioSocket.close();
+      return;
     }
-  });
 
-  elevenLabsSocket.on("message", (data) => {
-    const parsed = JSON.parse(data);
-    console.log("🗣️ AI:", parsed);
-  });
+    // Step 2: Connect to ElevenLabs
+    const elevenSocket = new WebSocket(signed_url);
 
-  twilioSocket.on("close", () => {
-    console.log("❌ Twilio socket closed");
-    elevenLabsSocket.close();
-  });
+    elevenSocket.on("open", () => {
+      console.log("🧠 ElevenLabs WebSocket connected");
+      elevenSocket.send(
+        JSON.stringify({
+          agent_id: AGENT_ID,
+          enable_transcription: ENABLE_TRANSCRIPTION,
+          session_id: `twilio-${Date.now()}`
+        })
+      );
+    });
 
-  elevenLabsSocket.on("close", () => {
-    console.log("🔌 ElevenLabs socket closed");
-  });
+    // Step 3: Forward Twilio audio → ElevenLabs
+    twilioSocket.on("message", (data) => {
+      try {
+        const msg = JSON.parse(data);
+        if (msg.event === "media") {
+          const audio = msg.media.payload;
+          if (elevenSocket.readyState === WebSocket.OPEN) {
+            elevenSocket.send(JSON.stringify({ audio }));
+          }
+        }
+      } catch (err) {
+        console.error("⚠️ Error parsing Twilio message:", err);
+      }
+    });
+
+    // Step 4: Log ElevenLabs messages
+    elevenSocket.on("message", (data) => {
+      try {
+        const parsed = JSON.parse(data);
+        console.log("🗣️ ElevenLabs AI:", parsed);
+      } catch (err) {
+        console.error("⚠️ Error parsing ElevenLabs message:", err);
+      }
+    });
+
+    // Step 5: Clean up on disconnect or error
+    const cleanup = () => {
+      if (elevenSocket.readyState === WebSocket.OPEN) elevenSocket.close();
+      if (twilioSocket.readyState === WebSocket.OPEN) twilioSocket.close();
+    };
+
+    twilioSocket.on("close", () => {
+      console.log("❌ Twilio socket closed");
+      cleanup();
+    });
+
+    elevenSocket.on("close", () => {
+      console.log("🔌 ElevenLabs socket closed");
+      cleanup();
+    });
+
+    twilioSocket.on("error", (err) => {
+      console.error("❗ Twilio socket error:", err);
+      cleanup();
+    });
+
+    elevenSocket.on("error", (err) => {
+      console.error("❗ ElevenLabs socket error:", err);
+      cleanup();
+    });
+
+  } catch (err) {
+    console.error("❌ Error setting up WebSocket relay:", err);
+    twilioSocket.close();
+  }
 });
 
 app.get("/", (req, res) => {
-  res.send("🧠 Twilio Stream Handler is running.");
+  res.send("🧠 Twilio → ElevenLabs WebSocket relay is running.");
 });
 
-const port = process.env.PORT || 8080;
-server.listen(port, () => {
-  console.log(`✅ Listening on port ${port}`);
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
+  console.log(`✅ Listening on port ${PORT}`);
 });
