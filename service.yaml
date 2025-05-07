@@ -1,0 +1,13 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: twilio-stream-handler
+  namespace: journal-by-dexter-co
+spec:
+  template:
+    spec:
+      containers:
+        - image: gcr.io/cloudrun/placeholder
+  traffic:
+    - latestRevision: true
+      percent: 100
