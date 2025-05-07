@@ -42,16 +42,15 @@ app.post("/init", (req, res) => {
   res.json(responseData);
 });
 
-// ✅ POST /twilio — Twilio webhook returns TwiML
+// ✅ POST /twilio — Twilio webhook returns valid, parseable TwiML
 app.post("/twilio", express.text({ type: "*/*" }), (req, res) => {
-  const response = `
-    <?xml version="1.0" encoding="UTF-8"?>
-    <Response>
-      <Start>
-        <Stream url="wss://${req.headers.host}/" />
-      </Start>
-    </Response>
-  `;
+  const response = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Start>
+    <Stream url="wss://${req.headers.host}/" />
+  </Start>
+</Response>`.trim();
+
   res.set("Content-Type", "text/xml");
   res.status(200).send(response);
 });
