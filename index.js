@@ -43,18 +43,19 @@ app.post("/init", (req, res) => {
   res.json(responseData);
 });
 
-// ✅ POST /twilio — Twilio webhook returns valid, parseable TwiML
+// ✅ POST /twilio — Updated to point Twilio to the correct WebSocket path
 app.post("/twilio", express.text({ type: "*/*" }), (req, res) => {
   const response = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
-    <Stream url="wss://${req.headers.host}/" />
+    <Stream url="wss://${req.headers.host}/ws" />
   </Start>
 </Response>`.trim();
 
   res.set("Content-Type", "text/xml");
   res.status(200).send(response);
 });
+
 
 // ✅ WebSocket relay: Twilio → ElevenLabs
 wss.on("connection", async (twilioSocket) => {
