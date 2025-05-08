@@ -29,12 +29,11 @@ server.on("upgrade", (request, socket, head) => {
   }
 });
 
-// POST /twilio — Twilio webhook returns stream + greeting
 app.post("/twilio", (req, res) => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
-    <Stream url="wss://twilio-elevenlabs-relay.fly.dev/ws" />
+    <Stream url="wss://twilio-elevenlabs-relay.onrender.com/ws" />
   </Start>
   <Say voice="alice">Welcome to Dexter Co. Please hold while Brad joins the call.</Say>
   <Pause length="10" />
@@ -44,6 +43,7 @@ app.post("/twilio", (req, res) => {
   res.type("text/xml");
   res.send(xml);
 });
+
 
 // POST /init — ElevenLabs personalization webhook
 app.post("/init", express.json(), (req, res) => {
