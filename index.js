@@ -6,10 +6,19 @@ require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
+
+const AGENT_ID = process.env.AGENT_ID;
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const ENABLE_TRANSCRIPTION = process.env.TRANSCRIPT_LOGGING === "true";
+
+// WebSocket Server: Upgrade handler for Twilio stream
 const wss = new WebSocket.Server({ noServer: true });
+
+require("dotenv").config();
 
 server.on("upgrade", (request, socket, head) => {
   const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+  console.log("🔄 WebSocket upgrade requested at", pathname);
 
   if (pathname === "/ws") {
     wss.handleUpgrade(request, socket, head, (ws) => {
@@ -20,57 +29,52 @@ server.on("upgrade", (request, socket, head) => {
   }
 });
 
+// POST /twilio — Twilio webhook returns stream + greeting
+app.post("/twilio", (req, res) => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Start>
+    <Stream url="wss://twilio-elevenlabs-relay.fly.dev/ws" />
+  </Start>
+  <Say voice="alice">Welcome to Dexter Co. Please hold while Brad joins the call.</Say>
+  <Pause length="10" />
+</Response>`;
 
+  console.log("🧾 TwiML returned to Twilio:\n", xml);
+  res.type("text/xml");
+  res.send(xml);
+});
 
-const AGENT_ID = process.env.AGENT_ID || "aiBrad";
-const ENABLE_TRANSCRIPTION = process.env.TRANSCRIPT_LOGGING === "true";
-
-app.use(express.json());
-
-// ✅ POST /init — ElevenLabs personalization webhook
-app.post("/init", (req, res) => {
-  const { caller_id, agent_id, called_number, call_sid } = req.body;
+// POST /init — ElevenLabs personalization webhook
+app.post("/init", express.json(), (req, res) => {
+  const { caller_id } = req.body;
 
   console.log("📡 ElevenLabs requested call init for:", caller_id);
 
   const responseData = {
     type: "conversation_initiation_client_data",
-    dynamic_variables: {
-      caller_name: "Brad",
-      last_interaction: "friendly and recent",
-    },
     conversation_config_override: {
       agent: {
         prompt: {
-          prompt: "You are aiBrad, the digital twin of Brad Harvey, founder of Dexter Co. You are warm, witty, and insightful."
+          prompt: "You are AI Brad, the digital twin of Brad Harvey, founder of Dexter Co. You are warm, witty, and insightful."
         },
-        first_message: "Hey there — this is aiBrad. What’s on your mind today?",
+        first_message: "Hey there — this is AI Brad. What’s going on? Was just thinking about you actually.",
         language: "en"
       },
       tts: {
-        voice_id: "YOUR_ELEVENLABS_VOICE_ID" // Replace with your actual voice_id
+        voice_id: "TGZ1coopiBy3kYprqz52" // TODO: replace with actual voice_id
       }
+    },
+    dynamic_variables: {
+      caller_name: "Brad",
+      last_interaction: "friendly and recent"
     }
   };
 
   res.json(responseData);
 });
 
-// ✅ POST /twilio — Updated to point Twilio to the correct WebSocket path
-app.post("/twilio", express.text({ type: "*/*" }), (req, res) => {
-  const response = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Start>
-    <Stream url="wss://twilio-elevenlabs-relay.onrender.com/ws" />
-  </Start>
-</Response>`.trim();
-
-  res.set("Content-Type", "text/xml");
-  res.status(200).send(response);
-});
-
-
-// ✅ WebSocket relay: Twilio → ElevenLabs
+// WebSocket connection: Relay between Twilio and ElevenLabs
 wss.on("connection", async (twilioSocket) => {
   console.log("📞 Twilio WebSocket connected");
 
@@ -79,14 +83,15 @@ wss.on("connection", async (twilioSocket) => {
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
       {
         headers: {
-          "xi-api-key": process.env.ELEVENLABS_API_KEY,
-        },
+          "xi-api-key": ELEVENLABS_API_KEY
+        }
       }
     );
 
     const { signed_url } = await res.json();
     if (!signed_url) {
-      console.error("❌ Failed to get signed ElevenLabs URL");
+      const errorText = await res.text();
+      console.error("❌ Failed to get signed ElevenLabs URL:", errorText);
       twilioSocket.close();
       return;
     }
@@ -104,26 +109,52 @@ wss.on("connection", async (twilioSocket) => {
       );
     });
 
+    // Track streamSid from Twilio "start" event
     twilioSocket.on("message", (data) => {
       try {
         const msg = JSON.parse(data);
-        if (msg.event === "media") {
-          const audio = msg.media.payload;
-          if (elevenSocket.readyState === WebSocket.OPEN) {
-            elevenSocket.send(JSON.stringify({ audio }));
-          }
+
+        if (msg.event === "start") {
+          twilioSocket.streamSid = msg.streamSid;
+          console.log(`🎙️ Twilio stream started: ${twilioSocket.streamSid}`);
+        }
+
+        if (msg.event === "media" && msg.media?.payload && elevenSocket.readyState === WebSocket.OPEN) {
+          elevenSocket.send(
+            JSON.stringify({
+              type: "user_audio",
+              audio: msg.media.payload
+            })
+          );
         }
       } catch (err) {
         console.error("⚠️ Error parsing Twilio message:", err);
       }
     });
 
+    // Relay AI audio from ElevenLabs → Twilio (with proper wrapping)
     elevenSocket.on("message", (data) => {
       try {
-        const parsed = JSON.parse(data);
-        console.log("🗣️ ElevenLabs AI:", parsed);
+        const msg = JSON.parse(data);
+
+        if (
+          msg.type === "audio" &&
+          msg.audio_event?.audio_base_64 &&
+          twilioSocket.readyState === WebSocket.OPEN
+        ) {
+          const wrapped = {
+            event: "media",
+            streamSid: twilioSocket.streamSid || "unknown",
+            media: {
+              payload: msg.audio_event.audio_base_64
+            }
+          };
+          twilioSocket.send(JSON.stringify(wrapped));
+        }
+
+        console.log("🗣️ ElevenLabs AI:", msg);
       } catch (err) {
-        console.error("⚠️ Error parsing ElevenLabs message:", err);
+        console.error("⚠️ Error processing ElevenLabs message:", err);
       }
     });
 
@@ -153,12 +184,12 @@ wss.on("connection", async (twilioSocket) => {
     });
 
   } catch (err) {
-    console.error("❌ Error setting up WebSocket relay:", err);
+    console.error("❌ Unexpected error in relay:", err);
     twilioSocket.close();
   }
 });
 
-// ✅ GET / — Health check
+// Health check
 app.get("/", (req, res) => {
   res.send("🧠 Twilio → ElevenLabs relay server is live.");
 });

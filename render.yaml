@@ -9,6 +9,8 @@ services:
       - key: ELEVENLABS_API_KEY
         sync: false
       - key: AGENT_ID
-        value: aiBrad
+        sync: false
       - key: TRANSCRIPT_LOGGING
         value: "true"
+    autoDeploy: true
+    region: oregon
