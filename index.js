@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
@@ -49,7 +50,7 @@ app.post("/init", express.json(), (req, res) => {
   
   console.log("📡 ElevenLabs requested call init for:", caller_id);
   console.log("🧬 Using voice ID:", process.env.ELEVENLABS_VOICE_ID);
-  
+
   const responseData = {
     type: "conversation_initiation_client_data",
     start_conversation: true, // 👈 Force it to speak!
