@@ -105,6 +105,13 @@ wss.on("connection", async (twilioSocket) => {
           session_id: `twilio-${Date.now()}`
         })
       );
+      elevenSocket.send(
+        JSON.stringify({
+          type: "agent_response_event",
+          audio_behavior: "immediate",
+          text: "Hey — it’s AI Brad. What’s going on?"
+        })
+      );
     });
 
     twilioSocket.on("message", (data) => {
