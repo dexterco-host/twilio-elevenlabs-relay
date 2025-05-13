@@ -84,11 +84,18 @@ wss.on("connection", async (twilioSocket) => {
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
       {
         headers: {
-          "xi-api-key": ELEVENLABS_API_KEY
+          "xi-api-key": process.env.ELEVENLABS_API_KEY
         }
       }
     );
-
+    
+    if (!res.ok) {
+      const errorText = await res.clone().text(); // ✅ Clone before reading
+      console.error("❌ Failed to get signed ElevenLabs URL:", errorText);
+      twilioSocket.close();
+      return;
+    }
+    
     const { signed_url } = await res.json();
     if (!signed_url) {
       const errorText = await res.text();
