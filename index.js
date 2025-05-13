@@ -2,23 +2,18 @@ const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
 const fetch = require("node-fetch");
-const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-
+const fs = require("fs");
 require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
-const fs = require('fs'); // Add this at the top of your file if not already present
 
-const AGENT_ID = process.env.AGENT_ID;
+const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ENABLE_TRANSCRIPTION = process.env.TRANSCRIPT_LOGGING === "true";
 
 // WebSocket Server: Upgrade handler for Twilio stream
 const wss = new WebSocket.Server({ noServer: true });
-
-require("dotenv").config();
 
 server.on("upgrade", (request, socket, head) => {
   const { pathname } = new URL(request.url, `http://${request.headers.host}`);
@@ -48,8 +43,6 @@ app.post("/twilio", (req, res) => {
   res.send(xml);
 });
 
-
-// POST /init — ElevenLabs personalization webhook
 app.post("/init", express.json(), (req, res) => {
   const { caller_id } = req.body;
 
@@ -66,7 +59,7 @@ app.post("/init", express.json(), (req, res) => {
         language: "en"
       },
       tts: {
-        voice_id: "TGZ1coopiBy3kYprqz52" // TODO: replace with actual voice_id
+        voice_id: process.env.ELEVENLABS_VOICE_ID
       }
     },
     dynamic_variables: {
@@ -78,39 +71,27 @@ app.post("/init", express.json(), (req, res) => {
   res.json(responseData);
 });
 
-// WebSocket connection: Relay between Twilio and ElevenLabs
 wss.on("connection", async (twilioSocket) => {
   console.log("📞 Twilio WebSocket connected");
 
   try {
-    const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+    const res = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
+      {
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY
+        }
+      }
+    );
 
-// Inside your WebSocket relay logic:
-const res = await fetch(
-  `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
-  {
-    headers: {
-      "xi-api-key": ELEVENLABS_API_KEY
-    }
-  }
-);
-
-if (!res.ok) {
-  const errorText = await res.clone().text(); // ✅ clone before reuse
-  console.error("❌ Failed to get signed ElevenLabs URL:", errorText);
-  twilioSocket.close();
-  return;
-}
-
-const { signed_url } = await res.json();
-
-    if (!signed_url) {
-      const errorText = await res.text();
+    if (!res.ok) {
+      const errorText = await res.clone().text();
       console.error("❌ Failed to get signed ElevenLabs URL:", errorText);
       twilioSocket.close();
       return;
     }
+
+    const { signed_url } = await res.json();
 
     const elevenSocket = new WebSocket(signed_url);
 
@@ -125,7 +106,6 @@ const { signed_url } = await res.json();
       );
     });
 
-    // Track streamSid from Twilio "start" event
     twilioSocket.on("message", (data) => {
       try {
         const msg = JSON.parse(data);
@@ -139,12 +119,10 @@ const { signed_url } = await res.json();
           const base64 = msg.media.payload;
           const buffer = Buffer.from(base64, 'base64');
           const sample = buffer.slice(0, 16).toString('hex');
-        
+
           console.log("🎤 Twilio user audio payload (first 16 bytes):", sample);
-        
-          // Optional: save inbound Twilio audio
-          fs.appendFileSync('twilio-input.ulaw', buffer); // Assuming µ-law
-        
+          fs.appendFileSync('twilio-input.ulaw', buffer);
+
           elevenSocket.send(
             JSON.stringify({
               type: "user_audio",
@@ -152,46 +130,41 @@ const { signed_url } = await res.json();
             })
           );
         }
-        
       } catch (err) {
         console.error("⚠️ Error parsing Twilio message:", err);
       }
     });
 
-    // Relay AI audio from ElevenLabs → Twilio (with proper wrapping)
     elevenSocket.on("message", (data) => {
-  try {
-    const msg = JSON.parse(data);
+      try {
+        const msg = JSON.parse(data);
 
-    if (
-      msg.type === "audio" &&
-      msg.audio_event?.audio_base_64 &&
-      twilioSocket.readyState === WebSocket.OPEN
-    ) {
-      const base64 = msg.audio_event.audio_base_64;
-      const buffer = Buffer.from(base64, 'base64');
-      const sample = buffer.slice(0, 16).toString('hex');
+        if (
+          msg.type === "audio" &&
+          msg.audio_event?.audio_base_64 &&
+          twilioSocket.readyState === WebSocket.OPEN
+        ) {
+          const base64 = msg.audio_event.audio_base_64;
+          const buffer = Buffer.from(base64, 'base64');
+          const sample = buffer.slice(0, 16).toString('hex');
 
-      console.log("🎧 ElevenLabs audio payload (first 16 bytes):", sample);
+          console.log("🎧 ElevenLabs audio payload (first 16 bytes):", sample);
+          fs.appendFileSync('audio-dump.ulaw', buffer);
 
-      // Optional: write to file
-      fs.appendFileSync('audio-dump.ulaw', buffer);
+          const wrapped = {
+            event: "media",
+            streamSid: twilioSocket.streamSid || "unknown",
+            media: { payload: base64 }
+          };
 
-      const wrapped = {
-        event: "media",
-        streamSid: twilioSocket.streamSid || "unknown",
-        media: { payload: base64 }
-      };
+          twilioSocket.send(JSON.stringify(wrapped));
+        }
 
-      twilioSocket.send(JSON.stringify(wrapped));
-    }
-
-    console.log("🗣️ ElevenLabs AI:", msg);
-  } catch (err) {
-    console.error("⚠️ Error processing ElevenLabs message:", err);
-  }
-});
-
+        console.log("🗣️ ElevenLabs AI:", msg);
+      } catch (err) {
+        console.error("⚠️ Error processing ElevenLabs message:", err);
+      }
+    });
 
     const cleanup = () => {
       if (elevenSocket.readyState === WebSocket.OPEN) elevenSocket.close();
@@ -230,7 +203,6 @@ app.get("/", (req, res) => {
 });
 
 const PORT = process.env.PORT || 8080;
-
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Listening on port ${PORT}`);
 });
