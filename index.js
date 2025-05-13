@@ -6,6 +6,7 @@ require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
+const fs = require('fs'); // Add this at the top of your file if not already present
 
 const AGENT_ID = process.env.AGENT_ID;
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
@@ -31,13 +32,11 @@ server.on("upgrade", (request, socket, head) => {
 
 app.post("/twilio", (req, res) => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Start>
-    <Stream url="wss://twilio-elevenlabs-relay.onrender.com/ws" />
-  </Start>
-  <Say voice="alice">Welcome to Dexter Co. Please hold while Brad joins the call.</Say>
-  <Pause length="10" />
-</Response>`;
+  <Response>
+    <Start>
+      <Stream url="wss://twilio-elevenlabs-relay.onrender.com/ws" />
+    </Start>
+  </Response>`;
 
   console.log("🧾 TwiML returned to Twilio:\n", xml);
   res.type("text/xml");
@@ -120,13 +119,23 @@ wss.on("connection", async (twilioSocket) => {
         }
 
         if (msg.event === "media" && msg.media?.payload && elevenSocket.readyState === WebSocket.OPEN) {
+          const base64 = msg.media.payload;
+          const buffer = Buffer.from(base64, 'base64');
+          const sample = buffer.slice(0, 16).toString('hex');
+        
+          console.log("🎤 Twilio user audio payload (first 16 bytes):", sample);
+        
+          // Optional: save inbound Twilio audio
+          fs.appendFileSync('twilio-input.ulaw', buffer); // Assuming µ-law
+        
           elevenSocket.send(
             JSON.stringify({
               type: "user_audio",
-              audio: msg.media.payload
+              audio: base64
             })
           );
         }
+        
       } catch (err) {
         console.error("⚠️ Error parsing Twilio message:", err);
       }
@@ -134,29 +143,38 @@ wss.on("connection", async (twilioSocket) => {
 
     // Relay AI audio from ElevenLabs → Twilio (with proper wrapping)
     elevenSocket.on("message", (data) => {
-      try {
-        const msg = JSON.parse(data);
+  try {
+    const msg = JSON.parse(data);
 
-        if (
-          msg.type === "audio" &&
-          msg.audio_event?.audio_base_64 &&
-          twilioSocket.readyState === WebSocket.OPEN
-        ) {
-          const wrapped = {
-            event: "media",
-            streamSid: twilioSocket.streamSid || "unknown",
-            media: {
-              payload: msg.audio_event.audio_base_64
-            }
-          };
-          twilioSocket.send(JSON.stringify(wrapped));
-        }
+    if (
+      msg.type === "audio" &&
+      msg.audio_event?.audio_base_64 &&
+      twilioSocket.readyState === WebSocket.OPEN
+    ) {
+      const base64 = msg.audio_event.audio_base_64;
+      const buffer = Buffer.from(base64, 'base64');
+      const sample = buffer.slice(0, 16).toString('hex');
 
-        console.log("🗣️ ElevenLabs AI:", msg);
-      } catch (err) {
-        console.error("⚠️ Error processing ElevenLabs message:", err);
-      }
-    });
+      console.log("🎧 ElevenLabs audio payload (first 16 bytes):", sample);
+
+      // Optional: write to file
+      fs.appendFileSync('audio-dump.ulaw', buffer);
+
+      const wrapped = {
+        event: "media",
+        streamSid: twilioSocket.streamSid || "unknown",
+        media: { payload: base64 }
+      };
+
+      twilioSocket.send(JSON.stringify(wrapped));
+    }
+
+    console.log("🗣️ ElevenLabs AI:", msg);
+  } catch (err) {
+    console.error("⚠️ Error processing ElevenLabs message:", err);
+  }
+});
+
 
     const cleanup = () => {
       if (elevenSocket.readyState === WebSocket.OPEN) elevenSocket.close();
