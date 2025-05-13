@@ -120,7 +120,9 @@ wss.on("connection", async (twilioSocket) => {
           const buffer = Buffer.from(base64, 'base64');
           const sample = buffer.slice(0, 16).toString('hex');
 
-          console.log("🎤 Twilio user audio payload (first 16 bytes):", sample);
+          console.log("🎤 Twilio user audio received. First 16 bytes:", sample);
+          console.log("→ Forwarding audio to ElevenLabs");
+          
           fs.appendFileSync('twilio-input.ulaw', buffer);
 
           elevenSocket.send(
@@ -137,6 +139,7 @@ wss.on("connection", async (twilioSocket) => {
 
     elevenSocket.on("message", (data) => {
       try {
+        console.log("📥 Raw ElevenLabs message:", data.toString().slice(0, 500));
         const msg = JSON.parse(data);
 
         if (
