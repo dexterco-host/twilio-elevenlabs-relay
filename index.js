@@ -2,6 +2,9 @@ const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
 const fetch = require("node-fetch");
+const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+
 require("dotenv").config();
 
 const app = express();
@@ -80,23 +83,28 @@ wss.on("connection", async (twilioSocket) => {
   console.log("📞 Twilio WebSocket connected");
 
   try {
-    const res = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
-      {
-        headers: {
-          "xi-api-key": process.env.ELEVENLABS_API_KEY
-        }
-      }
-    );
-    
-    if (!res.ok) {
-      const errorText = await res.clone().text(); // ✅ Clone before reading
-      console.error("❌ Failed to get signed ElevenLabs URL:", errorText);
-      twilioSocket.close();
-      return;
+    const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+
+// Inside your WebSocket relay logic:
+const res = await fetch(
+  `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
+  {
+    headers: {
+      "xi-api-key": ELEVENLABS_API_KEY
     }
-    
-    const { signed_url } = await res.json();
+  }
+);
+
+if (!res.ok) {
+  const errorText = await res.clone().text(); // ✅ clone before reuse
+  console.error("❌ Failed to get signed ElevenLabs URL:", errorText);
+  twilioSocket.close();
+  return;
+}
+
+const { signed_url } = await res.json();
+
     if (!signed_url) {
       const errorText = await res.text();
       console.error("❌ Failed to get signed ElevenLabs URL:", errorText);
