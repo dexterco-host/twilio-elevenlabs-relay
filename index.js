@@ -51,12 +51,13 @@ app.post("/init", express.json(), (req, res) => {
 
   const responseData = {
     type: "conversation_initiation_client_data",
+    start_conversation: true, // 👈 Force it to speak!
     conversation_config_override: {
       agent: {
         prompt: {
-          prompt: "You are AI Brad, the digital twin of Brad Harvey, founder of Dexter Co. You are warm, witty, and insightful."
+          prompt: "You are AI Brad, the digital twin of Brad Harvey..."
         },
-        first_message: "Hey there — this is AI Brad. What’s going on? Was just thinking about you actually.",
+        first_message: "Hey — it’s AI Brad. What’s going on?",
         language: "en"
       },
       tts: {
@@ -68,9 +69,7 @@ app.post("/init", express.json(), (req, res) => {
       last_interaction: "friendly and recent"
     }
   };
-
-  res.json(responseData);
-});
+  
 
 wss.on("connection", async (twilioSocket) => {
   console.log("📞 Twilio WebSocket connected");
