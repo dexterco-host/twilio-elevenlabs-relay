@@ -4,7 +4,6 @@ const http = require("http");
 const WebSocket = require("ws");
 const fetch = require("node-fetch");
 const fs = require("fs");
-require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
@@ -38,7 +37,6 @@ app.post("/twilio", (req, res) => {
     <Say voice="Polly.Joanna">Give me just a second to bring Brad in.</Say>
     <Pause length="15" />
   </Response>`;
-  
 
   console.log("🧾 TwiML returned to Twilio:\n", xml);
   res.type("text/xml");
@@ -47,13 +45,13 @@ app.post("/twilio", (req, res) => {
 
 app.post("/init", express.json(), (req, res) => {
   const { caller_id } = req.body;
-  
+
   console.log("📡 ElevenLabs requested call init for:", caller_id);
   console.log("🧬 Using voice ID:", process.env.ELEVENLABS_VOICE_ID);
 
   const responseData = {
     type: "conversation_initiation_client_data",
-    start_conversation: true, // 👈 Force it to speak!
+    start_conversation: true,
     conversation_config_override: {
       agent: {
         prompt: {
@@ -71,7 +69,9 @@ app.post("/init", express.json(), (req, res) => {
       last_interaction: "friendly and recent"
     }
   };
-  
+
+  res.json(responseData);
+});
 
 wss.on("connection", async (twilioSocket) => {
   console.log("📞 Twilio WebSocket connected");
@@ -94,7 +94,6 @@ wss.on("connection", async (twilioSocket) => {
     }
 
     const { signed_url } = await res.json();
-
     const elevenSocket = new WebSocket(signed_url);
 
     elevenSocket.on("open", () => {
@@ -124,7 +123,7 @@ wss.on("connection", async (twilioSocket) => {
 
           console.log("🎤 Twilio user audio received. First 16 bytes:", sample);
           console.log("→ Forwarding audio to ElevenLabs");
-          
+
           fs.appendFileSync('twilio-input.ulaw', buffer);
 
           elevenSocket.send(
