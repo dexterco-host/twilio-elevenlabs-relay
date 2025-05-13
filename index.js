@@ -46,9 +46,10 @@ app.post("/twilio", (req, res) => {
 
 app.post("/init", express.json(), (req, res) => {
   const { caller_id } = req.body;
-
+  
   console.log("📡 ElevenLabs requested call init for:", caller_id);
-
+  console.log("🧬 Using voice ID:", process.env.ELEVENLABS_VOICE_ID);
+  
   const responseData = {
     type: "conversation_initiation_client_data",
     start_conversation: true, // 👈 Force it to speak!
