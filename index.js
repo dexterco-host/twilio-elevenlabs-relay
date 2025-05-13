@@ -36,8 +36,8 @@ app.post("/twilio", (req, res) => {
     <Start>
       <Stream url="wss://twilio-elevenlabs-relay.onrender.com/ws" />
     </Start>
-    <Pause length="10" />
-  </Response>`;  
+    <Say voice="Polly.Joanna">One sec while I connect you.</Say>
+  </Response>`;
 
   console.log("🧾 TwiML returned to Twilio:\n", xml);
   res.type("text/xml");
