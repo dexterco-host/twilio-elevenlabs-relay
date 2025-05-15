@@ -32,7 +32,7 @@ app.post("/twilio", (req, res) => {
       <Stream url="wss://twilio-elevenlabs-relay.onrender.com/ws" />
     </Start>
     <Say voice="Polly.Joanna">Give me just a second to bring Brad in.</Say>
-    <Pause length="10"/>
+    <Pause length="20"/>
   </Response>`;
   res.type("text/xml").send(xml);
 });
@@ -104,27 +104,40 @@ wss.on("connection", async (twilioSocket) => {
           if (sid) {
             twilioSocket.streamSid = sid;
             console.log("🎙️ Twilio stream started:", sid);
-
-            // 🔥 Now that stream is ready, send AI Brad's message
+        
+            // FIRST message
             if (elevenSocket.readyState === WebSocket.OPEN) {
               elevenSocket.send(JSON.stringify({
                 type: "agent_response_event",
                 audio_behavior: "immediate",
                 text: "Hey — it’s AI Brad. What’s going on?"
               }));
-
+        
+              // SECOND message at 2.5s
               setTimeout(() => {
-                elevenSocket.send(JSON.stringify({
-                  type: "agent_response_event",
-                  audio_behavior: "immediate",
-                  text: "Just checking in to make sure you're still there!"
-                }));
+                if (elevenSocket.readyState === WebSocket.OPEN) {
+                  elevenSocket.send(JSON.stringify({
+                    type: "agent_response_event",
+                    audio_behavior: "immediate",
+                    text: "Just checking in to make sure you're hearing me clearly."
+                  }));
+                }
               }, 2500);
+        
+              // ✅ THIRD message at 4.5s (what you asked for)
+              setTimeout(() => {
+                if (elevenSocket.readyState === WebSocket.OPEN) {
+                  elevenSocket.send(JSON.stringify({
+                    type: "agent_response_event",
+                    audio_behavior: "immediate",
+                    text: "Still here — wanted to make sure you can hear me. Testing one more time!"
+                  }));
+                }
+              }, 4500);
             }
-          } else {
-            console.error("❌ No streamSid — audio will fail.");
           }
         }
+        
 
         if (msg.event === "media" && msg.media?.payload && elevenSocket.readyState === WebSocket.OPEN) {
           const base64 = msg.media.payload;
