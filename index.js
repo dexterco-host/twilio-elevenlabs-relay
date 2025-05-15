@@ -183,8 +183,12 @@ wss.on("connection", async (twilioSocket) => {
             streamSid: twilioSocket.streamSid || "unknown",
             media: { payload: base64 }
           };
-
+          
+          console.log("📡 Twilio streamSid used:", twilioSocket.streamSid);
+          console.log("📤 Sending Twilio media:", JSON.stringify(wrapped));
+          
           twilioSocket.send(JSON.stringify(wrapped));
+          
         }
 
         console.log("🗣️ ElevenLabs AI:", msg);
