@@ -111,7 +111,20 @@ wss.on("connection", async (twilioSocket) => {
           text: "Hey — it’s AI Brad. What’s going on?"
         })
       );
-    });
+ 
+    setTimeout(() => {
+      if (elevenSocket.readyState === WebSocket.OPEN) {
+        elevenSocket.send(
+          JSON.stringify({
+            type: "agent_response_event",
+            audio_behavior: "immediate",
+            text: "Hey — just making sure you can hear me!"
+          })
+        );
+        console.log("🔁 Re-sent initial AI Brad prompt after delay");
+      }
+    }, 2500);
+  });
 
     twilioSocket.on("message", (data) => {
       try {
@@ -152,7 +165,7 @@ wss.on("connection", async (twilioSocket) => {
         if (msg.type === "conversation_initiation_metadata_event") {
           console.log("🧬 Metadata Event:", msg);
         }
-        
+
         if (
           msg.type === "audio" &&
           msg.audio_event?.audio_base_64 &&
