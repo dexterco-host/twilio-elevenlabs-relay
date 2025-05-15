@@ -149,6 +149,10 @@ wss.on("connection", async (twilioSocket) => {
         console.log("📥 Raw ElevenLabs message:", data.toString().slice(0, 500));
         const msg = JSON.parse(data);
 
+        if (msg.type === "conversation_initiation_metadata_event") {
+          console.log("🧬 Metadata Event:", msg);
+        }
+        
         if (
           msg.type === "audio" &&
           msg.audio_event?.audio_base_64 &&
