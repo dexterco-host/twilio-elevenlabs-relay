@@ -3,7 +3,6 @@ const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
 const fetch = require("node-fetch");
-const fs = require("fs");
 
 const app = express();
 const server = http.createServer(app);
@@ -69,9 +68,7 @@ wss.on("connection", async (twilioSocket) => {
   try {
     const res = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
-      {
-        headers: { "xi-api-key": ELEVENLABS_API_KEY }
-      }
+      { headers: { "xi-api-key": ELEVENLABS_API_KEY } }
     );
 
     if (!res.ok) {
@@ -93,7 +90,6 @@ wss.on("connection", async (twilioSocket) => {
       }));
     });
 
-    // Handle incoming messages from Twilio
     twilioSocket.on("message", (data) => {
       try {
         console.log("📡 Raw Twilio message:", data.toString());
@@ -104,59 +100,42 @@ wss.on("connection", async (twilioSocket) => {
           if (sid) {
             twilioSocket.streamSid = sid;
             console.log("🎙️ Twilio stream started:", sid);
-        
-            // FIRST message
+
             if (elevenSocket.readyState === WebSocket.OPEN) {
               elevenSocket.send(JSON.stringify({
                 type: "agent_response_event",
                 audio_behavior: "immediate",
                 text: "Hey — it’s AI Brad. What’s going on?"
               }));
-        
-              // SECOND message at 2.5s
               setTimeout(() => {
-                if (elevenSocket.readyState === WebSocket.OPEN) {
-                  elevenSocket.send(JSON.stringify({
-                    type: "agent_response_event",
-                    audio_behavior: "immediate",
-                    text: "Just checking in to make sure you're hearing me clearly."
-                  }));
-                }
+                elevenSocket.send(JSON.stringify({
+                  type: "agent_response_event",
+                  audio_behavior: "immediate",
+                  text: "Just checking in to make sure you're hearing me clearly."
+                }));
               }, 2500);
-        
-              // ✅ THIRD message at 4.5s (what you asked for)
               setTimeout(() => {
-                if (elevenSocket.readyState === WebSocket.OPEN) {
-                  elevenSocket.send(JSON.stringify({
-                    type: "agent_response_event",
-                    audio_behavior: "immediate",
-                    text: "Still here — wanted to make sure you can hear me. Testing one more time!"
-                  }));
-                }
+                elevenSocket.send(JSON.stringify({
+                  type: "agent_response_event",
+                  audio_behavior: "immediate",
+                  text: "Still here — wanted to make sure you can hear me. Testing one more time!"
+                }));
               }, 4500);
             }
           }
         }
-        
 
         if (msg.event === "media" && msg.media?.payload && elevenSocket.readyState === WebSocket.OPEN) {
           const base64 = msg.media.payload;
           const buffer = Buffer.from(base64, 'base64');
           const sample = buffer.slice(0, 16).toString('hex');
           console.log("🎤 Twilio audio received. First 16 bytes:", sample);
-          fs.appendFileSync('twilio-input.ulaw', buffer);
-
-          elevenSocket.send(JSON.stringify({
-            type: "user_audio",
-            audio: base64
-          }));
         }
       } catch (err) {
         console.error("⚠️ Error parsing Twilio message:", err);
       }
     });
 
-    // Handle audio from ElevenLabs → Twilio
     elevenSocket.on("message", (data) => {
       try {
         const msg = JSON.parse(data);
@@ -176,7 +155,7 @@ wss.on("connection", async (twilioSocket) => {
           const buffer = Buffer.from(base64, 'base64');
           const sample = buffer.slice(0, 16).toString('hex');
           console.log("🎧 ElevenLabs audio (first 16 bytes):", sample);
-          fs.appendFileSync('audio-dump.ulaw', buffer);
+          console.log("🧾 Full base64 audio chunk:", base64);
 
           const wrapped = {
             event: "media",
