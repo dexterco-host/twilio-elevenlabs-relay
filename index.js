@@ -132,11 +132,16 @@ wss.on("connection", async (twilioSocket) => {
         const msg = JSON.parse(data);
 
         if (msg.event === "start") {
-          twilioSocket.streamSid = msg.streamSid || msg.start?.streamSid || "unknown";
-          console.log("🎙️ Twilio stream started (resolved):", twilioSocket.streamSid);
+          const sid = msg.streamSid || msg.start?.streamSid;
+          if (sid) {
+            twilioSocket.streamSid = sid;
+            console.log("🎙️ Twilio stream started:", sid);
+          } else {
+            console.error("❌ No streamSid in Twilio start message — audio will fail.");
+          }
         }
         
-
+      
         if (msg.event === "media" && msg.media?.payload && elevenSocket.readyState === WebSocket.OPEN) {
           const base64 = msg.media.payload;
           const buffer = Buffer.from(base64, 'base64');
@@ -173,25 +178,30 @@ wss.on("connection", async (twilioSocket) => {
           msg.audio_event?.audio_base_64 &&
           twilioSocket.readyState === WebSocket.OPEN
         ) {
+          // ✅ Prevent media send if streamSid is invalid
+          if (!twilioSocket.streamSid || twilioSocket.streamSid === "unknown") {
+            console.error("❌ streamSid is missing or 'unknown' — aborting audio send to Twilio");
+            return;
+          }
+        
           const base64 = msg.audio_event.audio_base_64;
           const buffer = Buffer.from(base64, 'base64');
           const sample = buffer.slice(0, 16).toString('hex');
-
+        
           console.log("🎧 ElevenLabs audio payload (first 16 bytes):", sample);
           fs.appendFileSync('audio-dump.ulaw', buffer);
-
+        
           const wrapped = {
             event: "media",
-            streamSid: twilioSocket.streamSid || "unknown",
+            streamSid: twilioSocket.streamSid,
             media: { payload: base64 }
           };
-          
+        
           console.log("📡 Twilio streamSid used:", twilioSocket.streamSid);
           console.log("📤 Sending Twilio media:", JSON.stringify(wrapped));
-          
           twilioSocket.send(JSON.stringify(wrapped));
-          
         }
+        
 
         console.log("🗣️ ElevenLabs AI:", msg);
       } catch (err) {
