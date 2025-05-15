@@ -128,12 +128,14 @@ wss.on("connection", async (twilioSocket) => {
 
     twilioSocket.on("message", (data) => {
       try {
+        console.log("📡 Raw Twilio message:", data.toString()); // ✅ ADD THIS
         const msg = JSON.parse(data);
 
         if (msg.event === "start") {
-          twilioSocket.streamSid = msg.streamSid;
-          console.log(`🎙️ Twilio stream started: ${twilioSocket.streamSid}`);
+          twilioSocket.streamSid = msg.streamSid || msg.start?.streamSid || "unknown";
+          console.log("🎙️ Twilio stream started (resolved):", twilioSocket.streamSid);
         }
+        
 
         if (msg.event === "media" && msg.media?.payload && elevenSocket.readyState === WebSocket.OPEN) {
           const base64 = msg.media.payload;
