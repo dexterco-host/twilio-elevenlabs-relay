@@ -34,7 +34,7 @@ app.post("/twilio", (_req, res) => {
     <Stream url="wss://twilio-elevenlabs-relay.onrender.com/ws" />
   </Start>
   <Say voice="Polly.Joanna">This is a fallback test voice. Please hold.</Say>
-  <Pause length="20"/>
+  <Pause length="10"/>
 </Response>`;
   res.type("text/xml").send(xml);
 });
